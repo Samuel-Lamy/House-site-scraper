@@ -1,6 +1,25 @@
 const puppeteer = require("puppeteer");
 const fs = require("fs");
 
+const cleanAddress = (address) => {
+  const cleanedAddress = address
+    .replace(/[^a-zA-Z0-9\s]/g, "")
+    .replace(/\s/g, "_");
+  return cleanedAddress;
+};
+
+const scrapeSingleHouse = async (houseElement) => {
+  const address = await houseElement.$(".address");
+  const shortAddress = await address.$eval("div", (e) => e.innerText);
+  const cleanedShortAddress = cleanAddress(shortAddress);
+  fs.mkdir(`Data/Houses/${cleanedShortAddress}`, { recursive: true }, (err) => {
+    if (err) {
+      return console.error(err);
+    }
+    console.log(`Created ${cleanedShortAddress} directory`);
+  });
+};
+
 const scrapeWebsite = async () => {
   const browser = await puppeteer.launch();
   const page = await browser.newPage();
@@ -58,27 +77,20 @@ const scrapeWebsite = async () => {
 
   await page.waitForSelector(".js-trigger-search");
   await page.click(".js-trigger-search");
+
+  await page.waitForSelector("#PriceSection-secondary", { hidden: true });
+  await page.waitForSelector(".property-thumbnail-item");
+
+  const houseElements = await page.$$(".property-thumbnail-item");
+  for (const houseElement of houseElements) {
+    await scrapeSingleHouse(houseElement);
+  }
+
   await page.screenshot({ path: "screenshot.png" });
 
-  const data = await page.evaluate(() => {
-    const title = document.title;
-    const text = document.querySelector("div").innerText;
-
-    return {
-      title,
-      text,
-    };
-  });
-
   await browser.close();
-  return data;
 };
 
-scrapeWebsite()
-  .then((result) => {
-    const dataString = JSON.stringify(result, null, 2);
-    fs.writeFileSync("Data/scrapedData.txt", dataString, "utf-8");
-  })
-  .catch((error) => {
-    console.error(error);
-  });
+scrapeWebsite().catch((error) => {
+  console.error(error);
+});
