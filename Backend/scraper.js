@@ -79,12 +79,25 @@ const scrapeWebsite = async () => {
   await page.click(".js-trigger-search");
 
   await page.waitForSelector("#PriceSection-secondary", { hidden: true });
-  await page.waitForSelector(".property-thumbnail-item");
+  let nextButton;
+  do {
+    await page.waitForSelector(".property-thumbnail-item");
 
-  const houseElements = await page.$$(".property-thumbnail-item");
-  for (const houseElement of houseElements) {
-    await scrapeSingleHouse(houseElement);
-  }
+    const houseElements = await page.$$(".property-thumbnail-item");
+    for (const houseElement of houseElements) {
+      await scrapeSingleHouse(houseElement);
+      houseCount++;
+    }
+
+    nextButton = await page.$(".next");
+
+    if (nextButton) {
+      await nextButton.click();
+    }
+  } while (
+    nextButton &&
+    !(await nextButton.evaluate((node) => node.classList.contains("inactive")))
+  );
 
   await page.screenshot({ path: "screenshot.png" });
 
