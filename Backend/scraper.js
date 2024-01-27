@@ -1,5 +1,6 @@
 const puppeteer = require("puppeteer");
-const fs = require("fs");
+const fs = require("fs").promises;
+const axios = require("axios");
 
 const cleanAddress = (address) => {
   const cleanedAddress = address
@@ -8,16 +9,70 @@ const cleanAddress = (address) => {
   return cleanedAddress;
 };
 
+const getHouseThumbnailInfo = async (houseElement, dirPath) => {
+  const thumbnailImgLink = await houseElement.$eval(
+    ".property-thumbnail-summary-link > img",
+    (image) => image.src
+  );
+  const imageResponse = await axios.get(thumbnailImgLink, {
+    responseType: "arraybuffer",
+  });
+
+  const price = await houseElement.$eval(
+    ".price > span",
+    (price) => price.innerText
+  );
+  const title = await houseElement.$eval(
+    ".category > div",
+    (title) => title.innerText
+  );
+  const addressArray = await houseElement.$$eval(
+    ".address > div",
+    (address) => address.innerText
+  );
+  const bedroomsElement = await houseElement.$(".cac");
+  const bedrooms = await bedroomsElement?.evaluate(
+    (bedrooms) => bedrooms?.innerText
+  );
+  const bathroomsElement = await houseElement.$(".sdb");
+  const bathrooms = await bathroomsElement?.evaluate(
+    (bathrooms) => bathrooms?.innerText
+  );
+  const sqftElement = await houseElement.$(".sqft");
+  const sqft = await sqftElement?.evaluate((sqft) => sqft?.innerText);
+  const nbPictures = await houseElement.$eval(
+    ".photo-buttons > button",
+    (nbPictures) => nbPictures.innerText
+  );
+
+  const thumbnailDir = dirPath + "/thumbnail_info";
+  fs.mkdir(thumbnailDir, { recursive: true }, (err) => {
+    if (err) {
+      return console.error(err);
+    }
+  }).then(() => {
+    fs.writeFile(
+      `${thumbnailDir}/house_thumbnail.jpg`,
+      imageResponse.data,
+      "binary"
+    );
+  });
+};
+
 const scrapeSingleHouse = async (houseElement) => {
   const address = await houseElement.$(".address");
   const shortAddress = await address.$eval("div", (e) => e.innerText);
   const cleanedShortAddress = cleanAddress(shortAddress);
-  fs.mkdir(`Data/Houses/${cleanedShortAddress}`, { recursive: true }, (err) => {
+  const dir = `Data/Houses/${cleanedShortAddress}`;
+  const mkdirPromise = fs.mkdir(dir, { recursive: true }, (err) => {
     if (err) {
       return console.error(err);
     }
-    console.log(`Created ${cleanedShortAddress} directory`);
   });
+  await mkdirPromise;
+  console.log(`Created ${cleanedShortAddress} directory`);
+
+  await getHouseThumbnailInfo(houseElement, dir);
 };
 
 const scrapeWebsite = async () => {
@@ -39,7 +94,6 @@ const scrapeWebsite = async () => {
   await page.click("#filter-search");
 
   await page.waitForSelector("#PriceSection-secondary");
-  await page.screenshot({ path: "screenshot.png" });
   const priceSection = await page.$("#PriceSection-heading-filters");
   await priceSection.click("button");
 
@@ -78,16 +132,20 @@ const scrapeWebsite = async () => {
   await page.waitForSelector(".js-trigger-search");
   await page.click(".js-trigger-search");
 
-  await page.waitForSelector("#PriceSection-secondary", { hidden: true });
+  const PriceSectionSec = await page.$("#PriceSection-secondary");
+  if (PriceSectionSec) {
+    await page.waitForSelector("#PriceSection-secondary", { hidden: true });
+  }
   let nextButton;
   do {
     await page.waitForSelector(".property-thumbnail-item");
 
     const houseElements = await page.$$(".property-thumbnail-item");
-    for (const houseElement of houseElements) {
-      await scrapeSingleHouse(houseElement);
-      houseCount++;
-    }
+    await Promise.all(
+      houseElements.map(async (houseElement) => {
+        await scrapeSingleHouse(houseElement);
+      })
+    );
 
     nextButton = await page.$(".next");
 
@@ -96,7 +154,9 @@ const scrapeWebsite = async () => {
     }
   } while (
     nextButton &&
-    !(await nextButton.evaluate((node) => node.classList.contains("inactive")))
+    !(await nextButton.evaluate((nextButtonNode) =>
+      nextButtonNode.classList.contains("inactive")
+    ))
   );
 
   await page.screenshot({ path: "screenshot.png" });
