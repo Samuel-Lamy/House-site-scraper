@@ -45,6 +45,18 @@ const getHouseThumbnailInfo = async (houseElement, dirPath) => {
     (nbPictures) => nbPictures.innerText
   );
 
+  const houseData = {
+    price,
+    title,
+    addressArray,
+    bedrooms,
+    bathrooms,
+    sqft,
+    nbPictures,
+  };
+
+  const jsonHouseData = JSON.stringify(houseData, null, 2);
+
   const thumbnailDir = dirPath + "/thumbnail_info";
   fs.mkdir(thumbnailDir, { recursive: true }, (err) => {
     if (err) {
@@ -56,6 +68,7 @@ const getHouseThumbnailInfo = async (houseElement, dirPath) => {
       imageResponse.data,
       "binary"
     );
+    fs.writeFile(`${thumbnailDir}/houseData.json`, jsonHouseData);
   });
 };
 
