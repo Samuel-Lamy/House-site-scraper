@@ -1,5 +1,6 @@
 const puppeteer = require("puppeteer");
 const fs = require("fs").promises;
+const fsStd = require("fs");
 const axios = require("axios");
 
 const cleanAddress = (address) => {
@@ -7,6 +8,41 @@ const cleanAddress = (address) => {
     .replace(/[^a-zA-Z0-9\s]/g, "")
     .replace(/\s/g, "_");
   return cleanedAddress;
+};
+
+const getAddressToHouse = async (houseList) => {
+  let AddressToHouse = {};
+  await Promise.all(
+    houseList.map(async (houseElement) => {
+      const address = await houseElement.$eval(
+        ".address > div",
+        (address) => address.innerText
+      );
+      AddressToHouse[cleanAddress(address)] = houseElement;
+    })
+  );
+  return AddressToHouse;
+};
+
+const getNewHousesAddresses = async (addressList, filename) => {
+  if (!fsStd.existsSync(filename)) {
+    await fs.writeFile(filename, "");
+    return addressList;
+  }
+  const addressData = await fs.readFile(filename, "utf8");
+  const existingAddresses = new Set(
+    addressData.split("\n")?.filter((address) => address.trim() !== "")
+  );
+
+  const uniqueNewAddresses = addressList?.filter(
+    (address) => !existingAddresses.has(address)
+  );
+  return uniqueNewAddresses;
+};
+
+const writeAddressesToFile = async (addressList, filename) => {
+  const addressData = addressList.join("\n");
+  fs.writeFile(filename, addressData);
 };
 
 const getHouseThumbnailInfo = async (houseElement, dirPath) => {
@@ -145,19 +181,18 @@ const scrapeWebsite = async () => {
   await page.waitForSelector(".js-trigger-search");
   await page.click(".js-trigger-search");
 
+  await page.waitForSelector("#PriceSection-secondary");
   const PriceSectionSec = await page.$("#PriceSection-secondary");
   if (PriceSectionSec) {
     await page.waitForSelector("#PriceSection-secondary", { hidden: true });
   }
   let nextButton;
+  let houseElements = [];
   do {
     await page.waitForSelector(".property-thumbnail-item");
 
-    const houseElements = await page.$$(".property-thumbnail-item");
-    await Promise.all(
-      houseElements.map(async (houseElement) => {
-        await scrapeSingleHouse(houseElement);
-      })
+    houseElements = houseElements.concat(
+      await page.$$(".property-thumbnail-item")
     );
 
     nextButton = await page.$(".next");
@@ -171,6 +206,16 @@ const scrapeWebsite = async () => {
       nextButtonNode.classList.contains("inactive")
     ))
   );
+  const filename = "AddressList.txt";
+  const addressToHouse = await getAddressToHouse(houseElements);
+  const newHouseAddresses = await getNewHousesAddresses(
+    Object.keys(addressToHouse),
+    filename
+  );
+  writeAddressesToFile(newHouseAddresses, filename);
+  const newHouseElements = newHouseAddresses.map((key) => addressToHouse[key]);
+
+  await Promise.all(newHouseElements.map(scrapeSingleHouse));
 
   await page.screenshot({ path: "screenshot.png" });
 
