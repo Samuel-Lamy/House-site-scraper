@@ -136,6 +136,11 @@ const scrapeWebsite = async () => {
     "https://www.centris.ca/fr/propriete~a-vendre~trois-rivieres"
   );
 
+  await page.setRequestInterception(true);
+  page.on("request", (request) => {
+    request.continue();
+  });
+
   await page.waitForSelector("#didomi-notice-agree-button");
   await page.click("#didomi-notice-agree-button");
 
@@ -188,23 +193,36 @@ const scrapeWebsite = async () => {
   }
   let nextButton;
   let houseElements = [];
+  let scannedLastPage = false;
   do {
     await page.waitForSelector(".property-thumbnail-item");
 
     houseElements = houseElements.concat(
       await page.$$(".property-thumbnail-item")
     );
-
     nextButton = await page.$(".next");
 
     if (nextButton) {
+      if (
+        await nextButton.evaluate((nextButtonNode) =>
+          nextButtonNode.classList.contains("inactive")
+        )
+      ) {
+        scannedLastPage = true;
+      }
       await nextButton.click();
+      if (!scannedLastPage) {
+        await page.waitForResponse((response) =>
+          response.url().includes("GetInscriptions")
+        );
+      }
     }
   } while (
     nextButton &&
-    !(await nextButton.evaluate((nextButtonNode) =>
+    (!(await nextButton.evaluate((nextButtonNode) =>
       nextButtonNode.classList.contains("inactive")
-    ))
+    )) ||
+      !scannedLastPage)
   );
   const filename = "AddressList.txt";
   const addressToHouse = await getAddressToHouse(houseElements);
