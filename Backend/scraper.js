@@ -92,6 +92,10 @@ const getHouseThumbnailInfo = async (houseElement, dirPath) => {
   };
 
   const jsonHouseData = JSON.stringify(houseData, null, 2);
+  const htmlHouseData = await houseElement.$eval(
+    ".shell",
+    (htmlHouseData) => htmlHouseData.innerHTML
+  );
 
   const thumbnailDir = dirPath + "/thumbnail_info";
   fs.mkdir(thumbnailDir, { recursive: true }, (err) => {
@@ -105,6 +109,7 @@ const getHouseThumbnailInfo = async (houseElement, dirPath) => {
       "binary"
     );
     fs.writeFile(`${thumbnailDir}/houseData.json`, jsonHouseData);
+    fs.writeFile(`${thumbnailDir}/htmlHouseData.html`, htmlHouseData);
   });
 };
 
@@ -185,12 +190,10 @@ const scrapeWebsite = async () => {
 
   await page.waitForSelector(".js-trigger-search");
   await page.click(".js-trigger-search");
+  await page.waitForResponse((response) =>
+    response.url().includes("https://www.centris.ca/fr/propriete")
+  );
 
-  await page.waitForSelector("#PriceSection-secondary");
-  const PriceSectionSec = await page.$("#PriceSection-secondary");
-  if (PriceSectionSec) {
-    await page.waitForSelector("#PriceSection-secondary", { hidden: true });
-  }
   let nextButton;
   let houseElements = [];
   let scannedLastPage = false;
