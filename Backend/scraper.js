@@ -27,7 +27,8 @@ const getAddressToHouse = async (houseList) => {
 const getNewHousesAddresses = async (addressList, filename) => {
   if (!fsStd.existsSync(filename)) {
     await fs.writeFile(filename, "");
-    return addressList;
+    const uniqueNewAddresses = addressList;
+    return { uniqueNewAddresses };
   }
   const addressData = await fs.readFile(filename, "utf8");
   const existingAddresses = new Set(
@@ -37,12 +38,15 @@ const getNewHousesAddresses = async (addressList, filename) => {
   const uniqueNewAddresses = addressList?.filter(
     (address) => !existingAddresses.has(address)
   );
-  return uniqueNewAddresses;
+  const uniqueOldAddresses = addressList?.filter((address) =>
+    existingAddresses.has(address)
+  );
+  return { uniqueNewAddresses, uniqueOldAddresses };
 };
 
 const writeAddressesToFile = async (addressList, filename) => {
-  const addressData = addressList.join("\n");
-  fs.writeFile(filename, addressData);
+  const addressData = addressList.join("\n") + "\n";
+  fs.appendFile(filename, addressData);
 };
 
 const getHouseThumbnailInfo = async (houseElement, dirPath) => {
@@ -113,20 +117,22 @@ const getHouseThumbnailInfo = async (houseElement, dirPath) => {
   });
 };
 
-const scrapeSingleHouse = async (houseElement) => {
+const scrapeSingleHouse = async (houseElement, isNew) => {
   const address = await houseElement.$(".address");
   const shortAddress = await address.$eval("div", (e) => e.innerText);
   const cleanedShortAddress = cleanAddress(shortAddress);
   const dir = `Data/Houses/${cleanedShortAddress}`;
-  const mkdirPromise = fs.mkdir(dir, { recursive: true }, (err) => {
-    if (err) {
-      return console.error(err);
-    }
-  });
-  await mkdirPromise;
-  console.log(`Created ${cleanedShortAddress} directory`);
+  if (isNew) {
+    const mkdirPromise = fs.mkdir(dir, { recursive: true }, (err) => {
+      if (err) {
+        return console.error(err);
+      }
+    });
+    await mkdirPromise;
+    console.log(`Created ${cleanedShortAddress} directory`);
 
-  await getHouseThumbnailInfo(houseElement, dir);
+    await getHouseThumbnailInfo(houseElement, dir);
+  }
 };
 
 const scrapeWebsite = async () => {
@@ -229,14 +235,20 @@ const scrapeWebsite = async () => {
   );
   const filename = "AddressList.txt";
   const addressToHouse = await getAddressToHouse(houseElements);
-  const newHouseAddresses = await getNewHousesAddresses(
-    Object.keys(addressToHouse),
-    filename
-  );
+  const {
+    uniqueNewAddresses: newHouseAddresses,
+    uniqueOldAddresses: oldHouseAddresses,
+  } = await getNewHousesAddresses(Object.keys(addressToHouse), filename);
   writeAddressesToFile(newHouseAddresses, filename);
   const newHouseElements = newHouseAddresses.map((key) => addressToHouse[key]);
+  const oldHouseElements = oldHouseAddresses.map((key) => addressToHouse[key]);
 
-  await Promise.all(newHouseElements.map(scrapeSingleHouse));
+  await Promise.all(
+    newHouseElements.map((house) => scrapeSingleHouse(house, true))
+  );
+  await Promise.all(
+    oldHouseElements.map((house) => scrapeSingleHouse(house, false))
+  );
 
   await page.screenshot({ path: "screenshot.png" });
 
