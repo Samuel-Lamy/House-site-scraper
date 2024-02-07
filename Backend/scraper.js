@@ -117,7 +117,41 @@ const getHouseThumbnailInfo = async (houseElement, dirPath) => {
   });
 };
 
-const scrapeSingleHouse = async (houseElement, isNew) => {
+const getHouseDetailedInfo = async (
+  houseElement,
+  dirPath,
+  browser,
+  baseURL
+) => {
+  const linkElement = await houseElement.$("a");
+  const link = new URL(
+    await linkElement.evaluate((node) => node.getAttribute("href")),
+    baseURL
+  ).href;
+  const page = await browser.newPage();
+  await page.setUserAgent(
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/64.0.3282.140 Safari/537.36 Edge/17.17134"
+  );
+  await page.goto(link);
+
+  await page.screenshot({ path: "screenshot2.png" });
+  await page.waitForSelector("div");
+  const htmlHouseData = await houseElement.$eval(
+    "div",
+    (htmlHouseData) => htmlHouseData.innerHTML
+  );
+
+  const detailedInfoDir = dirPath + "/detailed_info";
+  fs.mkdir(detailedInfoDir, { recursive: true }, (err) => {
+    if (err) {
+      return console.error(err);
+    }
+  }).then(() => {
+    fs.writeFile(`${detailedInfoDir}/htmlHouseData.html`, htmlHouseData);
+  });
+};
+
+const scrapeSingleHouse = async (houseElement, isNew, browser, baseURL) => {
   const address = await houseElement.$(".address");
   const shortAddress = await address.$eval("div", (e) => e.innerText);
   const cleanedShortAddress = cleanAddress(shortAddress);
@@ -132,6 +166,7 @@ const scrapeSingleHouse = async (houseElement, isNew) => {
     console.log(`Created ${cleanedShortAddress} directory`);
 
     await getHouseThumbnailInfo(houseElement, dir);
+    await getHouseDetailedInfo(houseElement, dir, browser, baseURL);
   }
 };
 
@@ -146,6 +181,8 @@ const scrapeWebsite = async () => {
   await page.goto(
     "https://www.centris.ca/fr/propriete~a-vendre~trois-rivieres"
   );
+
+  const baseURL = new URL(page.url()).origin;
 
   await page.setRequestInterception(true);
   page.on("request", (request) => {
@@ -244,10 +281,14 @@ const scrapeWebsite = async () => {
   const oldHouseElements = oldHouseAddresses.map((key) => addressToHouse[key]);
 
   await Promise.all(
-    newHouseElements.map((house) => scrapeSingleHouse(house, true))
+    newHouseElements.map((house) =>
+      scrapeSingleHouse(house, true, browser, baseURL)
+    )
   );
   await Promise.all(
-    oldHouseElements.map((house) => scrapeSingleHouse(house, false))
+    oldHouseElements.map((house) =>
+      scrapeSingleHouse(house, false, browser, baseURL)
+    )
   );
 
   await page.screenshot({ path: "screenshot.png" });
