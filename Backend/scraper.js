@@ -134,21 +134,76 @@ const getHouseDetailedInfo = async (
   );
   await page.goto(link);
 
+  await page.setRequestInterception(true);
+  page.on("request", (request) => {
+    request.continue();
+  });
+
   await page.screenshot({ path: "screenshot2.png" });
-  await page.waitForSelector("div");
+  await page.waitForSelector("body");
   const htmlHouseData = await houseElement.$eval(
     "div",
     (htmlHouseData) => htmlHouseData.innerHTML
   );
 
   const detailedInfoDir = dirPath + "/detailed_info";
-  fs.mkdir(detailedInfoDir, { recursive: true }, (err) => {
-    if (err) {
-      return console.error(err);
-    }
-  }).then(() => {
-    fs.writeFile(`${detailedInfoDir}/htmlHouseData.html`, htmlHouseData);
-  });
+  await fs
+    .mkdir(detailedInfoDir, { recursive: true }, (err) => {
+      if (err) {
+        return console.error(err);
+      }
+    })
+    .then(() => {
+      fs.writeFile(`${detailedInfoDir}/htmlHouseData.html`, htmlHouseData);
+    });
+
+  const picturesDir = detailedInfoDir + "/pictures";
+  await fs
+    .mkdir(picturesDir, { recursive: true }, (err) => {
+      if (err) {
+        return console.error(err);
+      }
+    })
+    .then(async () => {
+      const { width, height } = await page.viewport();
+
+      const centerX = width / 2;
+      const offsetY = height * 0.85;
+
+      await page.mouse.click(centerX, offsetY);
+      await page.waitForResponse((response) =>
+        response.url().includes("https://mspublic.centris.ca/media.ashx")
+      );
+
+      const gallery = await page.$("#gallery");
+      const pageNumbers = await gallery.$eval(
+        ".description > strong",
+        (pageNb) => pageNb.innerHTML
+      );
+      let currentPage = 1;
+      const lastPage = pageNumbers.split("/")[1];
+      do {
+        const imageElem = await page.$("#fullImg");
+        const imageLink = await imageElem.evaluate((node) =>
+          node.getAttribute("src")
+        );
+        const imageResponse = await axios.get(imageLink, {
+          responseType: "arraybuffer",
+        });
+        fs.writeFile(
+          picturesDir + `/${currentPage}.jpg`,
+          imageResponse.data,
+          "binary"
+        );
+        currentPage++;
+        await imageElem.click();
+        if (lastPage !== currentPage) {
+          await page.waitForResponse((response) =>
+            response.url().includes("https://mspublic.centris.ca/media.ashx")
+          );
+        }
+      } while (lastPage > currentPage);
+    });
 };
 
 const scrapeSingleHouse = async (houseElement, isNew, browser, baseURL) => {
@@ -281,12 +336,12 @@ const scrapeWebsite = async () => {
   const oldHouseElements = oldHouseAddresses.map((key) => addressToHouse[key]);
 
   await Promise.all(
-    newHouseElements.map((house) =>
+    newHouseElements.map(async (house) =>
       scrapeSingleHouse(house, true, browser, baseURL)
     )
   );
   await Promise.all(
-    oldHouseElements.map((house) =>
+    oldHouseElements.map(async (house) =>
       scrapeSingleHouse(house, false, browser, baseURL)
     )
   );
