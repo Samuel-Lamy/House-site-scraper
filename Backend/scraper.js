@@ -1,53 +1,13 @@
-const puppeteer = require("puppeteer");
-const fs = require("fs").promises;
-const fsStd = require("fs");
-const axios = require("axios");
+import {
+  cleanAddress,
+  getAddressToHouse,
+  getNewHousesAddresses,
+  writeAddressesToFile,
+} from "./scraperUtils.js";
 
-const cleanAddress = (address) => {
-  const cleanedAddress = address
-    .replace(/[^a-zA-Z0-9\s]/g, "")
-    .replace(/\s/g, "_");
-  return cleanedAddress;
-};
-
-const getAddressToHouse = async (houseList) => {
-  let AddressToHouse = {};
-  await Promise.all(
-    houseList.map(async (houseElement) => {
-      const address = await houseElement.$eval(
-        ".address > div",
-        (address) => address.innerText
-      );
-      AddressToHouse[cleanAddress(address)] = houseElement;
-    })
-  );
-  return AddressToHouse;
-};
-
-const getNewHousesAddresses = async (addressList, filename) => {
-  if (!fsStd.existsSync(filename)) {
-    await fs.writeFile(filename, "");
-    const uniqueNewAddresses = addressList;
-    return { uniqueNewAddresses };
-  }
-  const addressData = await fs.readFile(filename, "utf8");
-  const existingAddresses = new Set(
-    addressData.split("\n")?.filter((address) => address.trim() !== "")
-  );
-
-  const uniqueNewAddresses = addressList?.filter(
-    (address) => !existingAddresses.has(address)
-  );
-  const uniqueOldAddresses = addressList?.filter((address) =>
-    existingAddresses.has(address)
-  );
-  return { uniqueNewAddresses, uniqueOldAddresses };
-};
-
-const writeAddressesToFile = async (addressList, filename) => {
-  const addressData = addressList.join("\n") + "\n";
-  fs.appendFile(filename, addressData);
-};
+import puppeteer from "puppeteer";
+import { promises as fs } from "fs";
+import axios from "axios";
 
 const getHouseThumbnailInfo = async (houseElement, dirPath) => {
   const thumbnailImgLink = await houseElement.$eval(
@@ -139,7 +99,6 @@ const getHouseDetailedInfo = async (
     request.continue();
   });
 
-  await page.screenshot({ path: "screenshot2.png" });
   await page.waitForSelector("body");
   const htmlHouseData = await houseElement.$eval(
     "div",
