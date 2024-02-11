@@ -3,7 +3,10 @@ import {
   getAddressToHouse,
   getNewHousesAddresses,
   writeAddressesToFile,
+  toTextNumValue,
 } from "./scraperUtils.js";
+import { runDB } from "./mongoUtils.js";
+import { HouseData } from "./models/houseModels.js";
 
 import puppeteer from "puppeteer";
 import { promises as fs } from "fs";
@@ -46,14 +49,17 @@ const getHouseThumbnailInfo = async (houseElement, dirPath) => {
   );
 
   const houseData = {
-    price,
-    title,
-    addressArray,
-    bedrooms,
-    bathrooms,
-    sqft,
-    nbPictures,
+    price: toTextNumValue(price),
+    title: title,
+    addressArray: addressArray,
+    bedrooms: toTextNumValue(bedrooms),
+    bathrooms: toTextNumValue(bathrooms),
+    sqft: toTextNumValue(sqft),
+    nbPictures: toTextNumValue(nbPictures),
   };
+
+  const newHouse = new HouseData({ thumbnailInfo: houseData });
+  newHouse.save();
 
   const jsonHouseData = JSON.stringify(houseData, null, 2);
   const htmlHouseData = await houseElement.$eval(
@@ -185,6 +191,7 @@ const scrapeSingleHouse = async (houseElement, isNew, browser, baseURL) => {
 };
 
 const scrapeWebsite = async () => {
+  await runDB();
   const browser = await puppeteer.launch();
   const page = await browser.newPage();
 

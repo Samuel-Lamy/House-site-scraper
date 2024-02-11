@@ -46,3 +46,16 @@ export const writeAddressesToFile = async (addressList, filename) => {
   const addressData = addressList.join("\n") + "\n";
   fs.appendFile(filename, addressData);
 };
+
+const extractNumber = (inputString) => {
+  const numericString = inputString.replace(/\D/g, "");
+  const number = parseFloat(numericString);
+  return number;
+};
+
+export const toTextNumValue = (inputString) => {
+  if (inputString === undefined) {
+    return undefined;
+  }
+  return { text: inputString, value: extractNumber(inputString) };
+};
