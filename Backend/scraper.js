@@ -105,6 +105,9 @@ const getHouseDetailedInfo = async (
     request.continue();
   });
 
+  await page.waitForResponse((response) =>
+    response.url().includes("https://www.centris.ca")
+  );
   await page.waitForSelector("body");
   const htmlHouseData = await houseElement.$eval(
     "div",
@@ -130,20 +133,22 @@ const getHouseDetailedInfo = async (
       }
     })
     .then(async () => {
+      await page.waitForSelector("#overview");
       const { width, height } = await page.viewport();
 
       const centerX = width / 2;
-      const offsetY = height * 0.85;
+      const offsetY = height * 0.75;
 
       await page.mouse.click(centerX, offsetY);
+
       await page.waitForResponse((response) =>
-        response.url().includes("https://mspublic.centris.ca/media.ashx")
+        response.url().includes("https://mspublic.centris.ca/media.ashx?id=")
       );
 
       const gallery = await page.$("#gallery");
       const pageNumbers = await gallery.$eval(
-        ".description > strong",
-        (pageNb) => pageNb.innerHTML
+        ".image-wrapper > .description > strong",
+        (pageNb) => pageNb.innerText
       );
       let currentPage = 1;
       const lastPage = pageNumbers.split("/")[1];
@@ -252,6 +257,9 @@ const scrapeWebsite = async () => {
     );
   }
 
+  await page.waitForResponse((response) =>
+    response.url().includes("https://www.centris.ca/property/GetPropertyCount")
+  );
   await page.waitForSelector(".js-trigger-search");
   await page.click(".js-trigger-search");
   await page.waitForResponse((response) =>
@@ -317,6 +325,8 @@ const scrapeWebsite = async () => {
   await browser.close();
 };
 
-scrapeWebsite().catch((error) => {
-  console.error(error);
-});
+scrapeWebsite()
+  .then(() => console.log("Done"))
+  .catch((error) => {
+    console.error(error);
+  });
