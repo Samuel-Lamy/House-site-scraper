@@ -58,8 +58,17 @@ const getHouseThumbnailInfo = async (houseElement, dirPath) => {
     nbPictures: toTextNumValue(nbPictures),
   };
 
-  const newHouse = new HouseData({ thumbnailInfo: houseData });
-  newHouse.save();
+  await fetch("http://localhost:3005/newHouse/thumbnail", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(houseData),
+  }).then((response) => {
+    if (!response.ok) {
+      console.error(`Server responded with ${response.status}`);
+    }
+  });
 
   const jsonHouseData = JSON.stringify(houseData, null, 2);
   const htmlHouseData = await houseElement.$eval(
@@ -196,7 +205,18 @@ const scrapeSingleHouse = async (houseElement, isNew, browser, baseURL) => {
 };
 
 const scrapeWebsite = async () => {
-  await runDB();
+  await fetch("http://localhost:3005/")
+    .then((response) => {
+      if (!response.ok) {
+        throw new Error("Network response was not ok");
+      }
+      return response;
+    })
+    .then()
+    .catch((error) => {
+      console.error("Server is not working correctly");
+      throw error;
+    });
   const browser = await puppeteer.launch();
   const page = await browser.newPage();
 
@@ -328,5 +348,6 @@ const scrapeWebsite = async () => {
 scrapeWebsite()
   .then(() => console.log("Done"))
   .catch((error) => {
+    console.log("error");
     console.error(error);
   });
