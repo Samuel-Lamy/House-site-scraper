@@ -6,7 +6,11 @@ const textNumValueSchema = new Schema({
   value: { type: Number },
 });
 
-export const genericInfoSchema = new Schema({});
+export const genericInfoSchema = new Schema({
+  price: [Number],
+  dateAdded: { type: Date, default: Date.now },
+  dateUpdated: { type: Date, default: Date.now },
+});
 
 export const thumbnailInfoSchema = new Schema({
   price: { type: textNumValueSchema, required: true },
@@ -21,7 +25,8 @@ export const thumbnailInfoSchema = new Schema({
 export const detailedInfoSchema = new Schema({});
 
 const houseSchema = new Schema({
-  thumbnailInfo: { type: thumbnailInfoSchema, required: true },
+  generalInfo: genericInfoSchema,
+  thumbnailInfo: thumbnailInfoSchema,
 });
 
 export const HouseData = model("Houses", houseSchema);

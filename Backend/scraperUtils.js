@@ -47,7 +47,7 @@ export const writeAddressesToFile = async (addressList, filename) => {
   fs.appendFile(filename, addressData);
 };
 
-const extractNumber = (inputString) => {
+export const extractNumber = (inputString) => {
   const numericString = inputString.replace(/\D/g, "");
   const number = parseFloat(numericString);
   return number;

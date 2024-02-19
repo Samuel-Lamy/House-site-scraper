@@ -3,16 +3,52 @@ import {
   getAddressToHouse,
   getNewHousesAddresses,
   writeAddressesToFile,
+  extractNumber,
   toTextNumValue,
 } from "./scraperUtils.js";
-import { runDB } from "./mongoUtils.js";
-import { HouseData } from "./models/houseModels.js";
-
 import puppeteer from "puppeteer";
 import { promises as fs } from "fs";
 import axios from "axios";
 
-const getHouseThumbnailInfo = async (houseElement, dirPath) => {
+const processHousesInChunks = async (
+  houses,
+  chunkSize,
+  isNew,
+  browser,
+  baseURL
+) => {
+  for (let i = 0; i < houses.length; i += chunkSize) {
+    const chunk = houses.slice(i, i + chunkSize);
+    await Promise.all(
+      chunk.map(async (house) =>
+        scrapeSingleHouse(house, isNew, browser, baseURL)
+      )
+    );
+  }
+};
+
+let serverLock = Promise.resolve();
+
+const makeFetchRequestWhenServerIsReady = async (funcToCall) => {
+  let unlock;
+  const newLock = new Promise((resolve) => {
+    unlock = resolve;
+  });
+
+  const oldLock = serverLock;
+  serverLock = newLock;
+
+  await oldLock;
+
+  try {
+    const res = await funcToCall();
+    return res;
+  } finally {
+    unlock();
+  }
+};
+
+const getHouseThumbnailInfo = async (houseElement, dirPath, houseId) => {
   const thumbnailImgLink = await houseElement.$eval(
     ".property-thumbnail-summary-link > img",
     (image) => image.src
@@ -58,17 +94,19 @@ const getHouseThumbnailInfo = async (houseElement, dirPath) => {
     nbPictures: toTextNumValue(nbPictures),
   };
 
-  await fetch("http://localhost:3005/newHouse/thumbnail", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(houseData),
-  }).then((response) => {
-    if (!response.ok) {
-      console.error(`Server responded with ${response.status}`);
-    }
-  });
+  await makeFetchRequestWhenServerIsReady(async () =>
+    fetch(`http://localhost:3005/newHouse/thumbnail/${houseId}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(houseData),
+    }).then((response) => {
+      if (!response.ok) {
+        console.error(`Server responded with ${response.status}`);
+      }
+    })
+  );
 
   const jsonHouseData = JSON.stringify(houseData, null, 2);
   const htmlHouseData = await houseElement.$eval(
@@ -95,6 +133,7 @@ const getHouseThumbnailInfo = async (houseElement, dirPath) => {
 const getHouseDetailedInfo = async (
   houseElement,
   dirPath,
+  houseId,
   browser,
   baseURL
 ) => {
@@ -185,11 +224,40 @@ const getHouseDetailedInfo = async (
     });
 };
 
+const getHouseGeneralInfo = async (houseElement) => {
+  const address = await houseElement.$(".address");
+  const shortAddress = await address.$eval("div", (e) => e.innerText);
+  const cleanedShortAddress = cleanAddress(shortAddress);
+  const price = extractNumber(
+    await houseElement.$eval(".price > span", (price) => price.innerText)
+  );
+  const houseId = await makeFetchRequestWhenServerIsReady(async () =>
+    fetch(`http://localhost:3005/newHouse/general/${cleanedShortAddress}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ price: price }),
+    }).then((response) => {
+      if (!response.ok) {
+        console.error(`Server responded with ${response.status}`);
+      }
+      return response.json();
+    })
+  );
+
+  if (houseId === undefined) {
+    console.log("houseId is undefined");
+  }
+  return houseId;
+};
+
 const scrapeSingleHouse = async (houseElement, isNew, browser, baseURL) => {
   const address = await houseElement.$(".address");
   const shortAddress = await address.$eval("div", (e) => e.innerText);
   const cleanedShortAddress = cleanAddress(shortAddress);
   const dir = `Data/Houses/${cleanedShortAddress}`;
+  const houseId = await getHouseGeneralInfo(houseElement);
   if (isNew) {
     const mkdirPromise = fs.mkdir(dir, { recursive: true }, (err) => {
       if (err) {
@@ -199,8 +267,8 @@ const scrapeSingleHouse = async (houseElement, isNew, browser, baseURL) => {
     await mkdirPromise;
     console.log(`Created ${cleanedShortAddress} directory`);
 
-    await getHouseThumbnailInfo(houseElement, dir);
-    await getHouseDetailedInfo(houseElement, dir, browser, baseURL);
+    await getHouseThumbnailInfo(houseElement, dir, houseId);
+    await getHouseDetailedInfo(houseElement, dir, houseId, browser, baseURL);
   }
 };
 
@@ -329,16 +397,8 @@ const scrapeWebsite = async () => {
   const newHouseElements = newHouseAddresses.map((key) => addressToHouse[key]);
   const oldHouseElements = oldHouseAddresses.map((key) => addressToHouse[key]);
 
-  await Promise.all(
-    newHouseElements.map(async (house) =>
-      scrapeSingleHouse(house, true, browser, baseURL)
-    )
-  );
-  await Promise.all(
-    oldHouseElements.map(async (house) =>
-      scrapeSingleHouse(house, false, browser, baseURL)
-    )
-  );
+  await processHousesInChunks(newHouseElements, 1, true, browser, baseURL);
+  await processHousesInChunks(oldHouseElements, 1, false, browser, baseURL);
 
   await page.screenshot({ path: "screenshot.png" });
 
