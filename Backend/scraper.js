@@ -9,6 +9,7 @@ import {
 import puppeteer from "puppeteer";
 import { promises as fs } from "fs";
 import axios from "axios";
+import _ from "lodash";
 
 const processHousesInChunks = async (
   houses,
@@ -27,24 +28,30 @@ const processHousesInChunks = async (
   }
 };
 
-let serverLock = Promise.resolve();
+let fetchQueue = [];
+const removePotentiallyUselessItem = _.throttle(async () => {
+  const potentiallyUselessItem = fetchQueue[0];
+  await new Promise((resolve) => setTimeout(resolve, 3000));
+  if (fetchQueue[0] === potentiallyUselessItem) {
+    fetchQueue.shift();
+  }
+}, 5000);
 
 const makeFetchRequestWhenServerIsReady = async (funcToCall) => {
-  let unlock;
-  const newLock = new Promise((resolve) => {
-    unlock = resolve;
-  });
-
-  const oldLock = serverLock;
-  serverLock = newLock;
-
-  await oldLock;
-
-  try {
-    const res = await funcToCall();
-    return res;
-  } finally {
-    unlock();
+  fetchQueue.push(funcToCall);
+  while (true) {
+    try {
+      while (fetchQueue[0] !== funcToCall) {
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        if (fetchQueue.length === 0) {
+          fetchQueue.push(funcToCall);
+        }
+        removePotentiallyUselessItem();
+      }
+      const result = await funcToCall();
+      fetchQueue.shift();
+      return result;
+    } catch (_) {}
   }
 };
 
@@ -94,18 +101,19 @@ const getHouseThumbnailInfo = async (houseElement, dirPath, houseId) => {
     nbPictures: toTextNumValue(nbPictures),
   };
 
-  await makeFetchRequestWhenServerIsReady(async () =>
-    fetch(`http://localhost:3005/newHouse/thumbnail/${houseId}`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(houseData),
-    }).then((response) => {
-      if (!response.ok) {
-        console.error(`Server responded with ${response.status}`);
-      }
-    })
+  await makeFetchRequestWhenServerIsReady(
+    async () =>
+      await fetch(`http://localhost:3005/newHouse/thumbnail/${houseId}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(houseData),
+      }).then((response) => {
+        if (!response.ok) {
+          console.error(`Server responded with ${response.status}`);
+        }
+      })
   );
 
   const jsonHouseData = JSON.stringify(houseData, null, 2);
@@ -194,6 +202,15 @@ const getHouseDetailedInfo = async (
       );
 
       const gallery = await page.$("#gallery");
+      const testPageNumbers = await page.$(
+        ".image-wrapper > .description > strong"
+      );
+      if (!testPageNumbers) {
+        await page.mouse.click(centerX, offsetY);
+        await page.waitForResponse((response) =>
+          response.url().includes("https://mspublic.centris.ca/media.ashx?id=")
+        );
+      }
       const pageNumbers = await gallery.$eval(
         ".image-wrapper > .description > strong",
         (pageNb) => pageNb.innerText
@@ -214,7 +231,11 @@ const getHouseDetailedInfo = async (
           "binary"
         );
         currentPage++;
-        await imageElem.click();
+        try {
+          await imageElem.click();
+        } catch (_) {
+          page.screenshot({ path: "screenshot6.png" });
+        }
         if (lastPage !== currentPage) {
           await page.waitForResponse((response) =>
             response.url().includes("https://mspublic.centris.ca/media.ashx")
@@ -231,24 +252,24 @@ const getHouseGeneralInfo = async (houseElement) => {
   const price = extractNumber(
     await houseElement.$eval(".price > span", (price) => price.innerText)
   );
-  const houseId = await makeFetchRequestWhenServerIsReady(async () =>
-    fetch(`http://localhost:3005/newHouse/general/${cleanedShortAddress}`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ price: price }),
-    }).then((response) => {
-      if (!response.ok) {
-        console.error(`Server responded with ${response.status}`);
-      }
-      return response.json();
-    })
+  const houseId = await makeFetchRequestWhenServerIsReady(
+    async () =>
+      await fetch(
+        `http://localhost:3005/newHouse/general/${cleanedShortAddress}`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ price: price }),
+        }
+      ).then((response) => {
+        if (!response.ok) {
+          console.error(`Server responded with ${response.status}`);
+        }
+        return response.json();
+      })
   );
-
-  if (houseId === undefined) {
-    console.log("houseId is undefined");
-  }
   return houseId;
 };
 
@@ -269,6 +290,8 @@ const scrapeSingleHouse = async (houseElement, isNew, browser, baseURL) => {
 
     await getHouseThumbnailInfo(houseElement, dir, houseId);
     await getHouseDetailedInfo(houseElement, dir, houseId, browser, baseURL);
+  } else {
+    console.log(`House ${cleanedShortAddress} updated`);
   }
 };
 
@@ -397,8 +420,8 @@ const scrapeWebsite = async () => {
   const newHouseElements = newHouseAddresses.map((key) => addressToHouse[key]);
   const oldHouseElements = oldHouseAddresses.map((key) => addressToHouse[key]);
 
-  await processHousesInChunks(newHouseElements, 1, true, browser, baseURL);
-  await processHousesInChunks(oldHouseElements, 1, false, browser, baseURL);
+  await processHousesInChunks(newHouseElements, 100, true, browser, baseURL);
+  await processHousesInChunks(oldHouseElements, 100, false, browser, baseURL);
 
   await page.screenshot({ path: "screenshot.png" });
 
