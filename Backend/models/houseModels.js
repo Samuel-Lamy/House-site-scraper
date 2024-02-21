@@ -22,11 +22,15 @@ export const thumbnailInfoSchema = new Schema({
   nbPictures: textNumValueSchema,
 });
 
-export const detailedInfoSchema = new Schema({});
+export const detailedInfoSchema = new Schema({
+  teaserCaracteristics: Schema.Types.Mixed,
+  generalCaracteristics: Schema.Types.Mixed,
+});
 
 const houseSchema = new Schema({
   generalInfo: genericInfoSchema,
   thumbnailInfo: thumbnailInfoSchema,
+  detailsInfo: detailedInfoSchema,
 });
 
 export const HouseData = model("Houses", houseSchema);

@@ -48,13 +48,18 @@ app.post("/newHouse/details/:id", async (req, res) => {
     await new Promise((resolve) => setTimeout(resolve, 1000));
   }
   dbInUse = true;
-  await HouseData.findOneAndUpdate(
-    { _id: req.params.id },
-    { detailsInfo: req.body }
-  ).then(() => {
-    dbInUse = false;
-    res.sendStatus(200);
-  });
+  try {
+    await HouseData.findOneAndUpdate(
+      { _id: req.params.id },
+      { detailsInfo: req.body }
+    ).then(() => {
+      dbInUse = false;
+      res.sendStatus(200);
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).send(err);
+  }
 });
 
 app.post("/newHouse/general/:address", async (req, res) => {

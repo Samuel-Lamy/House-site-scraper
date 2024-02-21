@@ -11,23 +11,6 @@ import { promises as fs } from "fs";
 import axios from "axios";
 import _ from "lodash";
 
-const processHousesInChunks = async (
-  houses,
-  chunkSize,
-  isNew,
-  browser,
-  baseURL
-) => {
-  for (let i = 0; i < houses.length; i += chunkSize) {
-    const chunk = houses.slice(i, i + chunkSize);
-    await Promise.all(
-      chunk.map(async (house) =>
-        scrapeSingleHouse(house, isNew, browser, baseURL)
-      )
-    );
-  }
-};
-
 let fetchQueue = [];
 const removePotentiallyUselessItem = _.throttle(async () => {
   const potentiallyUselessItem = fetchQueue[0];
@@ -154,21 +137,83 @@ const getHouseDetailedInfo = async (
   await page.setUserAgent(
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/64.0.3282.140 Safari/537.36 Edge/17.17134"
   );
-  await page.goto(link);
 
   await page.setRequestInterception(true);
   page.on("request", (request) => {
     request.continue();
   });
 
-  await page.waitForResponse((response) =>
-    response.url().includes("https://www.centris.ca")
-  );
-  await page.waitForSelector("body");
-  const htmlHouseData = await houseElement.$eval(
-    "div",
+  while (true) {
+    try {
+      await page.goto(link);
+
+      await page.waitForResponse((response) =>
+        response.url().includes("https://www.centris.ca")
+      );
+      await page.waitForSelector("body");
+      break;
+    } catch (_) {}
+  }
+  const htmlHouseData = await page.$eval(
+    "body",
     (htmlHouseData) => htmlHouseData.innerHTML
   );
+
+  await page.screenshot({ path: "screenshot8.png" });
+
+  try {
+    const teaserCaracteristics = await page.$$eval(
+      "#overview .grid_3 .description .teaser div",
+      (caract) =>
+        caract.map((c) => {
+          return c.innerText;
+        })
+    );
+
+    const generalCaracteristicsTitles = await page.$$eval(
+      "#overview .carac-container .carac-title",
+      (caract) =>
+        caract.map((c) => {
+          return c.innerText;
+        })
+    );
+
+    const generalCaracteristicsValues = await page.$$eval(
+      "#overview .carac-container .carac-value > span",
+      (caract) =>
+        caract.map((c) => {
+          return c.innerText;
+        })
+    );
+
+    let generalCaracteristics = {};
+    for (let i = 0; i < generalCaracteristicsTitles.length; i++) {
+      generalCaracteristics[generalCaracteristicsTitles[i]] =
+        generalCaracteristicsValues[i];
+    }
+
+    const detailedInfo = {
+      teaserCaracteristics: teaserCaracteristics,
+      generalCaracteristics: generalCaracteristics,
+    };
+
+    await makeFetchRequestWhenServerIsReady(
+      async () =>
+        await fetch(`http://localhost:3005/newHouse/details/${houseId}`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(detailedInfo),
+        }).then((response) => {
+          if (!response.ok) {
+            console.error(`Server responded with ${response.status}`);
+          }
+        })
+    );
+  } catch (e) {
+    console.log("New stuff ", e);
+  }
 
   const detailedInfoDir = dirPath + "/detailed_info";
   await fs
@@ -289,7 +334,10 @@ const scrapeSingleHouse = async (houseElement, isNew, browser, baseURL) => {
     console.log(`Created ${cleanedShortAddress} directory`);
 
     await getHouseThumbnailInfo(houseElement, dir, houseId);
+    console.log(`ThumbnailInfo from ${cleanedShortAddress} stored`);
+
     await getHouseDetailedInfo(houseElement, dir, houseId, browser, baseURL);
+    console.log(`DetailedInfo from ${cleanedShortAddress} stored`);
   } else {
     console.log(`House ${cleanedShortAddress} updated`);
   }
@@ -420,8 +468,16 @@ const scrapeWebsite = async () => {
   const newHouseElements = newHouseAddresses.map((key) => addressToHouse[key]);
   const oldHouseElements = oldHouseAddresses.map((key) => addressToHouse[key]);
 
-  await processHousesInChunks(newHouseElements, 100, true, browser, baseURL);
-  await processHousesInChunks(oldHouseElements, 100, false, browser, baseURL);
+  await Promise.all(
+    newHouseElements.map(async (house) =>
+      scrapeSingleHouse(house, true, browser, baseURL)
+    )
+  );
+  await Promise.all(
+    oldHouseElements.map(async (house) =>
+      scrapeSingleHouse(house, false, browser, baseURL)
+    )
+  );
 
   await page.screenshot({ path: "screenshot.png" });
 
