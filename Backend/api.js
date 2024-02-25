@@ -1,6 +1,7 @@
 import express from "express";
 import mongoose from "mongoose";
 import { HouseData } from "./models/houseModels.js";
+import { HouseList } from "./models/houseList.js";
 
 const app = express();
 const port = 3005;
@@ -85,6 +86,18 @@ app.post("/newHouse/general/:address", async (req, res) => {
       dbInUse = false;
       res.send(newHouse._id);
     }
+  });
+});
+
+app.post("/houseList", async (req, res) => {
+  const houseList = new HouseList(req.body);
+  houseList.save();
+  res.sendStatus(200);
+});
+
+app.get("/houseList", async (req, res) => {
+  await HouseList.findOne().then((data) => {
+    return res.send(data?.houseList);
   });
 });
 

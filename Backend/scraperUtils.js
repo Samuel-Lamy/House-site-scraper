@@ -1,5 +1,6 @@
 import { promises as fs } from "fs";
 import fsStd from "fs";
+import _ from "lodash";
 
 export const cleanAddress = (address) => {
   const cleanedAddress = address
@@ -28,6 +29,14 @@ export const getNewHousesAddresses = async (addressList, filename) => {
     const uniqueNewAddresses = addressList;
     return { uniqueNewAddresses };
   }
+
+  const dbOldAdresses = await fetch("http://localhost:3005/houseList", {
+    method: "GET",
+    headers: {
+      "Content-Type": "application/json",
+    },
+  });
+
   const addressData = await fs.readFile(filename, "utf8");
   const existingAddresses = new Set(
     addressData.split("\n")?.filter((address) => address.trim() !== "")
@@ -39,6 +48,23 @@ export const getNewHousesAddresses = async (addressList, filename) => {
   const uniqueOldAddresses = addressList?.filter((address) =>
     existingAddresses.has(address)
   );
+
+  const houseList = _.map(Object.values(uniqueNewAddresses), (address) => {
+    return {
+      address: address,
+      isThumbnailFetched: false,
+      areDetailsFetched: false,
+    };
+  }).concat(dbOldAdresses);
+
+  await fetch("http://localhost:3005/houseList", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ houseList }),
+  });
+
   return { uniqueNewAddresses, uniqueOldAddresses };
 };
 

@@ -464,9 +464,10 @@ const scrapeWebsite = async () => {
     uniqueNewAddresses: newHouseAddresses,
     uniqueOldAddresses: oldHouseAddresses,
   } = await getNewHousesAddresses(Object.keys(addressToHouse), filename);
+
   writeAddressesToFile(newHouseAddresses, filename);
-  const newHouseElements = newHouseAddresses.map((key) => addressToHouse[key]);
-  const oldHouseElements = oldHouseAddresses.map((key) => addressToHouse[key]);
+  const newHouseElements = newHouseAddresses?.map((key) => addressToHouse[key]);
+  const oldHouseElements = oldHouseAddresses?.map((key) => addressToHouse[key]);
 
   await Promise.all(
     newHouseElements.map(async (house) =>
