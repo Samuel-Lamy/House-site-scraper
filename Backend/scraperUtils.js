@@ -24,10 +24,23 @@ export const getAddressToHouse = async (houseList) => {
 };
 
 export const getNewHousesAddresses = async (addressList, filename) => {
+  let uniqueNewAddresses;
+  let uniqueOldAddresses;
   if (!fsStd.existsSync(filename)) {
     await fs.writeFile(filename, "");
-    const uniqueNewAddresses = addressList;
-    return { uniqueNewAddresses };
+    uniqueNewAddresses = addressList;
+  } else {
+    const addressData = await fs.readFile(filename, "utf8");
+    const existingAddresses = new Set(
+      addressData.split("\n")?.filter((address) => address.trim() !== "")
+    );
+
+    uniqueNewAddresses = addressList?.filter(
+      (address) => !existingAddresses.has(address)
+    );
+    uniqueOldAddresses = addressList?.filter((address) =>
+      existingAddresses.has(address)
+    );
   }
 
   const dbOldAdresses = await fetch("http://localhost:3005/houseList", {
@@ -35,23 +48,12 @@ export const getNewHousesAddresses = async (addressList, filename) => {
     headers: {
       "Content-Type": "application/json",
     },
-  });
-
-  const addressData = await fs.readFile(filename, "utf8");
-  const existingAddresses = new Set(
-    addressData.split("\n")?.filter((address) => address.trim() !== "")
-  );
-
-  const uniqueNewAddresses = addressList?.filter(
-    (address) => !existingAddresses.has(address)
-  );
-  const uniqueOldAddresses = addressList?.filter((address) =>
-    existingAddresses.has(address)
-  );
+  }).then((res) => res?.json());
 
   const houseList = _.map(Object.values(uniqueNewAddresses), (address) => {
     return {
       address: address,
+      isDirCreated: false,
       isThumbnailFetched: false,
       areDetailsFetched: false,
     };
@@ -65,7 +67,7 @@ export const getNewHousesAddresses = async (addressList, filename) => {
     body: JSON.stringify({ houseList }),
   });
 
-  return { uniqueNewAddresses, uniqueOldAddresses };
+  return { uniqueNewAddresses, uniqueOldAddresses, houseList };
 };
 
 export const writeAddressesToFile = async (addressList, filename) => {

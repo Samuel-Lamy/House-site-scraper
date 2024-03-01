@@ -90,14 +90,21 @@ app.post("/newHouse/general/:address", async (req, res) => {
 });
 
 app.post("/houseList", async (req, res) => {
-  const houseList = new HouseList(req.body);
-  houseList.save();
+  const houseList = await HouseList.findOne();
+  if (houseList) {
+    Object.assign(houseList, req.body);
+    await houseList.save();
+  } else {
+    const newHouseList = new HouseList(req.body);
+    await newHouseList.save();
+  }
   res.sendStatus(200);
 });
 
 app.get("/houseList", async (req, res) => {
   await HouseList.findOne().then((data) => {
-    return res.send(data?.houseList);
+    if (!data) return res.send([]);
+    return res.send(data.houseList);
   });
 });
 

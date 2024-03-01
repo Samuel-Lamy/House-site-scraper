@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 
 const houseSchema = new mongoose.Schema({
   address: String,
+  isDirCreated: Boolean,
   isThumbnailFetched: Boolean,
   areDetailsFetched: Boolean,
 });

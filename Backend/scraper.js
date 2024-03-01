@@ -11,6 +11,8 @@ import { promises as fs } from "fs";
 import axios from "axios";
 import _ from "lodash";
 
+let houseList;
+
 let fetchQueue = [];
 const removePotentiallyUselessItem = _.throttle(async () => {
   const potentiallyUselessItem = fetchQueue[0];
@@ -211,9 +213,7 @@ const getHouseDetailedInfo = async (
           }
         })
     );
-  } catch (e) {
-    console.log("New stuff ", e);
-  }
+  } catch (e) {}
 
   const detailedInfoDir = dirPath + "/detailed_info";
   await fs
@@ -318,28 +318,48 @@ const getHouseGeneralInfo = async (houseElement) => {
   return houseId;
 };
 
-const scrapeSingleHouse = async (houseElement, isNew, browser, baseURL) => {
+const scrapeSingleHouse = async (houseElement, browser, baseURL) => {
   const address = await houseElement.$(".address");
   const shortAddress = await address.$eval("div", (e) => e.innerText);
   const cleanedShortAddress = cleanAddress(shortAddress);
   const dir = `Data/Houses/${cleanedShortAddress}`;
   const houseId = await getHouseGeneralInfo(houseElement);
-  if (isNew) {
+  if (
+    !houseList.find((house) => house.address === cleanedShortAddress)
+      .isDirCreated
+  ) {
     const mkdirPromise = fs.mkdir(dir, { recursive: true }, (err) => {
       if (err) {
         return console.error(err);
       }
     });
     await mkdirPromise;
+    houseList.find(
+      (house) => house.address === cleanedShortAddress
+    ).isDirCreated = true;
     console.log(`Created ${cleanedShortAddress} directory`);
+  }
 
+  if (
+    !houseList.find((house) => house.address === cleanedShortAddress)
+      .isThumbnailFetched
+  ) {
     await getHouseThumbnailInfo(houseElement, dir, houseId);
+    houseList.find(
+      (house) => house.address === cleanedShortAddress
+    ).isThumbnailFetched = true;
     console.log(`ThumbnailInfo from ${cleanedShortAddress} stored`);
+  }
 
+  if (
+    !houseList.find((house) => house.address === cleanedShortAddress)
+      .areDetailsFetched
+  ) {
     await getHouseDetailedInfo(houseElement, dir, houseId, browser, baseURL);
+    houseList.find(
+      (house) => house.address === cleanedShortAddress
+    ).areDetailsFetched = true;
     console.log(`DetailedInfo from ${cleanedShortAddress} stored`);
-  } else {
-    console.log(`House ${cleanedShortAddress} updated`);
   }
 };
 
@@ -463,9 +483,12 @@ const scrapeWebsite = async () => {
   const {
     uniqueNewAddresses: newHouseAddresses,
     uniqueOldAddresses: oldHouseAddresses,
+    houseList: defaultHouseList,
   } = await getNewHousesAddresses(Object.keys(addressToHouse), filename);
 
-  writeAddressesToFile(newHouseAddresses, filename);
+  houseList = defaultHouseList;
+
+  await writeAddressesToFile(newHouseAddresses, filename);
   const newHouseElements = newHouseAddresses?.map((key) => addressToHouse[key]);
   const oldHouseElements = oldHouseAddresses?.map((key) => addressToHouse[key]);
 
@@ -486,8 +509,34 @@ const scrapeWebsite = async () => {
 };
 
 scrapeWebsite()
-  .then(() => console.log("Done"))
+  .then(() => {
+    if (houseList !== undefined) {
+      fetch("http://localhost:3005/houseList", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ houseList }),
+      });
+    }
+    return console.log("Done");
+  })
   .catch((error) => {
-    console.log("error");
-    console.error(error);
+    if (houseList !== undefined) {
+      fetch("http://localhost:3005/houseList", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ houseList }),
+      }).then(() => {
+        console.log("error");
+        console.error(error);
+        process.exit(1);
+      });
+    } else {
+      console.log("error");
+      console.error(error);
+      process.exit(1);
+    }
   });
