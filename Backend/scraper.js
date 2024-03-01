@@ -494,12 +494,12 @@ const scrapeWebsite = async () => {
 
   await Promise.all(
     newHouseElements.map(async (house) =>
-      scrapeSingleHouse(house, true, browser, baseURL)
+      scrapeSingleHouse(house, browser, baseURL)
     )
   );
   await Promise.all(
     oldHouseElements.map(async (house) =>
-      scrapeSingleHouse(house, false, browser, baseURL)
+      scrapeSingleHouse(house, browser, baseURL)
     )
   );
 
