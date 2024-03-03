@@ -161,8 +161,6 @@ const getHouseDetailedInfo = async (
     (htmlHouseData) => htmlHouseData.innerHTML
   );
 
-  await page.screenshot({ path: "screenshot8.png" });
-
   try {
     const teaserCaracteristics = await page.$$eval(
       "#overview .grid_3 .description .teaser div",
@@ -247,6 +245,7 @@ const getHouseDetailedInfo = async (
       );
 
       const gallery = await page.$("#gallery");
+
       const testPageNumbers = await page.$(
         ".image-wrapper > .description > strong"
       );
@@ -262,6 +261,7 @@ const getHouseDetailedInfo = async (
       );
       let currentPage = 1;
       const lastPage = pageNumbers.split("/")[1];
+
       do {
         const imageElem = await page.$("#fullImg");
         const imageLink = await imageElem.evaluate((node) =>
@@ -275,12 +275,28 @@ const getHouseDetailedInfo = async (
           imageResponse.data,
           "binary"
         );
+        await page.keyboard.press("ArrowRight");
         currentPage++;
-        try {
-          await imageElem.click();
-        } catch (_) {
-          page.screenshot({ path: "screenshot6.png" });
+
+        const virtualTour = await gallery.$(
+          ".image-wrapper > .wrap > .virtual-tour"
+        );
+        if (virtualTour) {
+          if (currentPage === 2) {
+            await page.waitForFunction(
+              `document.querySelector(".image-wrapper > .description > strong").innerText.split("/")[0] == ${currentPage}`
+            );
+            await page.keyboard.press("ArrowRight");
+            currentPage++;
+          }
+          if (lastPage !== currentPage) {
+            await page.waitForFunction(
+              `document.querySelector(".image-wrapper > .description > strong").innerText.split("/")[0] == ${currentPage}`
+            );
+          }
+          continue;
         }
+
         if (lastPage !== currentPage) {
           await page.waitForResponse((response) =>
             response.url().includes("https://mspublic.centris.ca/media.ashx")
