@@ -8,6 +8,8 @@ const textNumValueSchema = new Schema({
 
 export const genericInfoSchema = new Schema({
   price: [Number],
+  address: String,
+  cleanedAddress: String,
   dateAdded: { type: Date, default: Date.now },
   dateUpdated: { type: Date, default: Date.now },
 });

@@ -68,7 +68,9 @@ app.post("/newHouse/general/:address", async (req, res) => {
     await new Promise((resolve) => setTimeout(resolve, 1000));
   }
   dbInUse = true;
-  await HouseData.findOne({ address: req.params.address }).then((data) => {
+  await HouseData.findOne({
+    "generalInfo.cleanedAddress": req.body.cleanedAddress,
+  }).then((data) => {
     if (data) {
       if (
         data.generalInfo.price[data.generalInfo.price.length - 1] !==

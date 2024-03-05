@@ -322,7 +322,11 @@ const getHouseGeneralInfo = async (houseElement) => {
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({ price: price }),
+          body: JSON.stringify({
+            price: price,
+            address: shortAddress,
+            cleanedAddress: cleanedShortAddress,
+          }),
         }
       ).then((response) => {
         if (!response.ok) {
@@ -354,6 +358,8 @@ const scrapeSingleHouse = async (houseElement, browser, baseURL) => {
       (house) => house.address === cleanedShortAddress
     ).isDirCreated = true;
     console.log(`Created ${cleanedShortAddress} directory`);
+  } else {
+    console.log(`Updated ${cleanedShortAddress}`);
   }
 
   if (
