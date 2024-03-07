@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "scrape": "node Backend/scraper.js",
+    "web": "node Frontend/createFrontend.js",
     "serve": "nodemon Backend/api.js"
   },
   "keywords": [],

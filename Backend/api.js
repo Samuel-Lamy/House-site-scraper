@@ -2,6 +2,7 @@ import express from "express";
 import mongoose from "mongoose";
 import { HouseData } from "./models/houseModels.js";
 import { HouseList } from "./models/houseList.js";
+import { createFrontend } from "../Frontend/createFrontend.js";
 
 const app = express();
 const port = 3005;
@@ -107,6 +108,12 @@ app.get("/houseList", async (req, res) => {
   await HouseList.findOne().then((data) => {
     if (!data) return res.send([]);
     return res.send(data.houseList);
+  });
+});
+
+app.get("/frontend", async (req, res) => {
+  createFrontend().then((data) => {
+    res.send(data);
   });
 });
 
